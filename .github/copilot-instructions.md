@@ -127,6 +127,113 @@ poetry run mypy src/
 poetry run pytest --cov=src/atlasforge --cov-report=term-missing
 ```
 
+### Checklist de PR / CI (detalhado) ✅
+
+- Obrigatório em cada PR:
+	- Rodar todos os testes (unit + integration): `poetry run pytest`
+	- Rodar lint e format-check: `poetry run ruff check src/` e `poetry run black src/ --check`
+	- Rodar type-check: `poetry run mypy src/`
+	- Verificar cobertura mínima (quando aplicável) e não reduzir coverage sem justificativa
+	- Executar testes específicos de integração para mudanças que afetam geração/template
+	- Atualizar `services/<servico>/implementacoes/*.md` quando houver mudança de comportamento ou contrato
+
+- Recomendações de revisão:
+	- Peça revisão de alguém familiar com `domain/` e `application/` se houver lógica de negócio
+	- Peça revisão de infraestrutura/ops para mudanças em observabilidade ou deployment
+
+- Exemplo mínimo de GitHub Actions job (`.github/workflows/ci.yml`):
+
+```yaml
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+	test:
+		runs-on: ubuntu-latest
+		strategy:
+			matrix:
+				python: [3.11]
+		steps:
+			- uses: actions/checkout@v4
+			- name: Set up Python
+				uses: actions/setup-python@v4
+				with:
+					python-version: ${{ matrix.python }}
+			- name: Install dependencies
+				run: |
+					pip install poetry
+					poetry install -n
+			- name: Lint
+				run: poetry run ruff check src/
+			- name: Format check
+				run: poetry run black src/ --check
+			- name: Type check
+				run: poetry run mypy src/
+			- name: Tests
+				run: poetry run pytest -q
+```
+
+### Exemplo de teste de integração — geração básica 🔧
+
+Coloque este exemplo em `tests/integration/test_full_generation.py`. O teste demonstra o uso programático do `GenerateProjectUseCase` e valida o resultado básico (sucesso e presença do manifest e de arquivos gerados).
+
+```python
+import tempfile
+from pathlib import Path
+
+from atlasforge.domain.entities.project_spec import ProjectSpec
+from atlasforge.domain.value_objects.project_name import ProjectName
+from atlasforge.domain.value_objects.template_version import TemplateVersion
+from atlasforge.application.use_cases.generate_project import GenerateProjectUseCase
+from atlasforge.infrastructure.filesystem.local_filesystem_adapter import LocalFileSystemAdapter
+from atlasforge.infrastructure.templating.jinja2_engine import Jinja2TemplateEngine
+from atlasforge.infrastructure.checksum.sha256_checksum import SHA256ChecksumAdapter
+from atlasforge.infrastructure.persistence.json_manifest_repository import JSONManifestRepository
+
+
+class TestFullProjectGeneration:
+		def test_generate_basic_project(self, tmp_path: Path):
+				templates_dir = Path("src/atlasforge/templates")
+				filesystem = LocalFileSystemAdapter()
+				template_engine = Jinja2TemplateEngine(templates_dir)
+				checksum = SHA256ChecksumAdapter()
+				manifest_repo = JSONManifestRepository(filesystem)
+
+				generate = GenerateProjectUseCase(
+						filesystem=filesystem,
+						template_engine=template_engine,
+						checksum=checksum,
+						manifest_repo=manifest_repo,
+				)
+
+				spec = ProjectSpec(
+						project_name=ProjectName("my-service"),
+						template_version=TemplateVersion("1.0.0"),
+						modules=frozenset(),
+				)
+
+				# Use tmp_path (pytest fixture) as output
+				result = generate.execute(spec, tmp_path)
+
+				assert result.success is True
+				assert result.total_files > 0
+
+				# Verifica que o manifest foi criado
+				manifest_path = tmp_path / ".atlasforge" / "manifest.json"
+				assert manifest_path.exists()
+
+				# Verifica arquivo chave do projeto gerado
+				assert (tmp_path / "my-service" / "pyproject.toml").exists()
+
+```
+
+Comando para rodar apenas esse teste:
+
+```bash
+poetry run pytest tests/integration/test_full_generation.py::TestFullProjectGeneration::test_generate_basic_project -q
+```
+
 ## Quando pedir orientação antes de mudar
 - Mudanças em nomes de eventos, esquemas de eventos ou contratos públicos
 - Troca de banco, modelo de autenticação, ou alterações que afetem múltiplos serviços
