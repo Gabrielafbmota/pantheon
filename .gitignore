@@ -1,0 +1,14 @@
+**/*/.venv
+**/*/venv
+**/*/__pycache__/
+**/*/.mypy_cache/
+**/*/.pytest_cache/
+**/*/.tox/
+**/*/.ruff_cache/
+**/*/.cache/
+**/*/dist/
+**/*/build/
+**/*/.eggs/
+**/*/*.egg-info/
+**/*/.venv/
+**/*/venv/                                

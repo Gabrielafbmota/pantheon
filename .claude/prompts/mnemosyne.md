@@ -16,6 +16,7 @@ Papel do sistema:
 
 Stack:
 - Backend: Python + FastAPI
+- Poetry
 - Banco: MongoDB
 - Storage bruto: S3 ou filesystem
 - Arquitetura: Clean Architecture

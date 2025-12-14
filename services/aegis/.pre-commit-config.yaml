@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: aegis-scan
+        name: Aegis quick scan
+        entry: python -m aegis.cli scan --repo . --commit HEAD --output -
+        language: system
+        types: [python]
+        pass_filenames: false
