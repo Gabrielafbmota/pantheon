@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "aegis"
+version = "0.1.0"
+description = "Aegis - quality and security gate"
+authors = ["Gabriela <gabriela@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pydantic = "^1.10"
+typer = {extras = ["all"], version = "^0.7"}
+pymongo = "^4.5"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.0"
+
+[tool.poetry.scripts]
+aegis = "aegis.cli:main"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
