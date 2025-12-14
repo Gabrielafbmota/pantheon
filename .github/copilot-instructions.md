@@ -124,6 +124,16 @@ uvicorn src.<service>.api.main:app --reload --port 8000
 - Trate este repositório como plataforma interna. Não introduza decisões não documentadas sem validação.
 - Priorize clareza, rastreabilidade e evolução segura.
 
+## 🧾 Knowledge bases (onde procurar conhecimento canônico)
+
+- A fonte da verdade para decisões, prompts e knowledge do projeto está em `.claude/`.
+- Locais importantes:
+  - `.claude/CLAUDE.md` — documento canônico com arquitetura e decisões.
+  - `.claude/project-knowledge/` — políticas, NFRs, roadmap e notas do projeto.
+  - `.claude/prompts/` — prompts canônicos para agentes (ex.: `mnemosyne.md`, `aegis.md`).
+- Para conveniência, há um índice rápido em `.github/knowledge/README.md` que aponta para os arquivos mais usados.
+- Se um workflow do GitHub precisar consumir algum arquivo (ex.: Actions que usam prompts), copie apenas os arquivos necessários para `.github/` e documente a razão no `.github/knowledge/README.md`.
+
 ## ➡️ Output esperado ao implementar serviços
 
 - Sempre crie um arquivo `services/<servico>/implementacoes/*.md` com as decisões de implementação.
