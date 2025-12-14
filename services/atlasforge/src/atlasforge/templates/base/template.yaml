@@ -1,0 +1,7 @@
+name: atlas-base
+version: 1.0.0
+description: "FastAPI Clean Architecture base template"
+variables:
+  - project_name
+  - template_version
+  - modules
