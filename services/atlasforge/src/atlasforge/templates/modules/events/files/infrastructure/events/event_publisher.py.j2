@@ -1,0 +1,63 @@
+"""Event publisher for {{ project_name }}."""
+
+import logging
+from typing import List
+
+from {{ project_name|snake_case }}.domain.events.base_event import BaseEvent
+from {{ project_name|snake_case }}.domain.ports.event_port import IEventPublisher
+
+logger = logging.getLogger(__name__)
+
+
+class InMemoryEventPublisher(IEventPublisher):
+    """
+    In-memory event publisher for development/testing.
+
+    This is a simple implementation that stores events in memory.
+    In production, replace with a real message broker (RabbitMQ, Kafka, etc.).
+    """
+
+    def __init__(self) -> None:
+        """Initialize event publisher."""
+        self._events: List[BaseEvent] = []
+
+    async def publish(self, event: BaseEvent) -> None:
+        """
+        Publish an event.
+
+        Args:
+            event: Event to publish
+        """
+        self._events.append(event)
+        logger.info(
+            f"Event published: {event.event_type}",
+            extra={
+                "event_id": str(event.event_id),
+                "event_type": event.event_type,
+                "correlation_id": str(event.correlation_id),
+            },
+        )
+
+    async def publish_batch(self, events: List[BaseEvent]) -> None:
+        """
+        Publish multiple events.
+
+        Args:
+            events: List of events to publish
+        """
+        for event in events:
+            await self.publish(event)
+
+    def get_published_events(self) -> List[BaseEvent]:
+        """
+        Get all published events (for testing).
+
+        Returns:
+            List of published events
+        """
+        return self._events.copy()
+
+    def clear(self) -> None:
+        """Clear all published events (for testing)."""
+        self._events.clear()
+        logger.debug("Event store cleared")

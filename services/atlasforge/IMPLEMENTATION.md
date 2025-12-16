@@ -79,7 +79,7 @@ services/atlasforge/
 - Python 3.11 ou 3.12
 - Poetry (gerenciador de dependências)
 
-### Passos
+### Instalação Local (Desenvolvimento)
 
 ```bash
 # 1. Navegar para o diretório do AtlasForge
@@ -95,6 +95,80 @@ poetry run atlasforge version
 **Saída esperada**:
 ```
 AtlasForge version 1.0.0
+```
+
+### Instalação Global (Recomendado para Uso)
+
+Para usar o AtlasForge de qualquer pasta do sistema:
+
+#### Método 1: Script Automatizado (Recomendado)
+
+```bash
+cd services/atlasforge
+./install.sh
+```
+
+O script irá:
+- ✅ Verificar e instalar pipx (se necessário)
+- ✅ Verificar versão do Python (>= 3.11)
+- ✅ Instalar AtlasForge globalmente
+- ✅ Verificar a instalação
+
+#### Método 2: Makefile
+
+```bash
+cd services/atlasforge
+make install-global
+```
+
+#### Método 3: pipx Direto
+
+```bash
+cd services/atlasforge
+pipx install .
+```
+
+#### Método 4: Poetry Build + pipx
+
+```bash
+cd services/atlasforge
+poetry build
+pipx install dist/atlasforge-1.0.0-py3-none-any.whl
+```
+
+### Verificar Instalação Global
+
+Após instalação global, você pode usar `atlasforge` de qualquer pasta:
+
+```bash
+# De qualquer diretório
+atlasforge version
+
+# Gerar projeto em qualquer lugar
+cd ~
+atlasforge generate my-new-service
+
+# Help
+atlasforge --help
+```
+
+### Atualizar Instalação Global
+
+```bash
+cd services/atlasforge
+pipx reinstall atlasforge
+
+# Ou usando Make
+make reinstall
+```
+
+### Desinstalar
+
+```bash
+pipx uninstall atlasforge
+
+# Ou usando Make
+make uninstall
 ```
 
 ---

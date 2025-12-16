@@ -1,0 +1,82 @@
+"""Base event classes for {{ project_name }}."""
+
+from datetime import datetime
+from typing import Any, Dict
+from uuid import UUID, uuid4
+
+from pydantic import BaseModel, Field
+
+
+class BaseEvent(BaseModel):
+    """
+    Base class for all domain events.
+
+    Events follow the format: <domain>.v<version>.<action>
+    Example: user.v1.created, orders.v2.payment_succeeded
+    """
+
+    event_id: UUID = Field(default_factory=uuid4, description="Unique event identifier")
+    event_type: str = Field(..., description="Event type (domain.v1.action)")
+    event_version: int = Field(default=1, description="Event schema version")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Event timestamp")
+    correlation_id: UUID = Field(
+        default_factory=uuid4, description="Correlation ID for tracing"
+    )
+    payload: Dict[str, Any] = Field(..., description="Event payload")
+
+    class Config:
+        """Pydantic configuration."""
+
+        json_schema_extra = {
+            "example": {
+                "event_id": "550e8400-e29b-41d4-a716-446655440000",
+                "event_type": "user.v1.created",
+                "event_version": 1,
+                "timestamp": "2024-01-15T10:30:00Z",
+                "correlation_id": "550e8400-e29b-41d4-a716-446655440001",
+                "payload": {"user_id": "123", "email": "user@example.com"},
+            }
+        }
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert event to dictionary.
+
+        Returns:
+            Event as dictionary
+        """
+        return self.model_dump(mode="json")
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "BaseEvent":
+        """
+        Create event from dictionary.
+
+        Args:
+            data: Event data
+
+        Returns:
+            BaseEvent instance
+        """
+        return cls(**data)
+
+
+class DomainEvent(BaseEvent):
+    """
+    Domain event with typed payload.
+
+    Extend this class to create domain-specific events.
+
+    Example:
+        class UserCreatedEvent(DomainEvent):
+            event_type: str = "user.v1.created"
+
+            class PayloadModel(BaseModel):
+                user_id: str
+                email: str
+                name: str
+
+            payload: PayloadModel
+    """
+
+    pass

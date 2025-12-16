@@ -1,0 +1,46 @@
+name: otel
+version: 1.0.0
+description: OpenTelemetry instrumentation with logs, metrics, and traces
+category: observability
+
+dependencies: []
+
+files:
+  - source: infrastructure/observability/telemetry.py.j2
+    destination: src/{{project_name|snake_case}}/infrastructure/observability/telemetry.py
+    is_user_editable: true
+
+  - source: infrastructure/observability/__init__.py
+    destination: src/{{project_name|snake_case}}/infrastructure/observability/__init__.py
+    is_user_editable: false
+
+  - source: infrastructure/observability/logging_config.py.j2
+    destination: src/{{project_name|snake_case}}/infrastructure/observability/logging_config.py
+    is_user_editable: true
+
+pip_dependencies:
+  - opentelemetry-api>=1.21.0
+  - opentelemetry-sdk>=1.21.0
+  - opentelemetry-instrumentation-fastapi>=0.42b0
+  - opentelemetry-exporter-otlp>=1.21.0
+
+environment_variables:
+  - name: OTEL_SERVICE_NAME
+    description: Service name for OpenTelemetry
+    example: "{{ project_name }}"
+    required: true
+
+  - name: OTEL_EXPORTER_OTLP_ENDPOINT
+    description: OTLP exporter endpoint
+    example: http://localhost:4317
+    required: false
+
+  - name: LOG_LEVEL
+    description: Logging level
+    example: INFO
+    required: false
+
+configuration:
+  traces_enabled: true
+  metrics_enabled: true
+  logs_enabled: true

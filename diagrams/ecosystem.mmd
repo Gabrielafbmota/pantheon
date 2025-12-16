@@ -1,0 +1,13 @@
+flowchart LR
+  P[PANTHEON]:::p
+  AF[AtlasForge]:::s -->|project.*| P
+  AG[Aegis]:::s -->|quality.*| P
+  MN[Mnemosyne]:::s -->|knowledge.*| P
+  EO[EyeOfHorusOps]:::s -->|incident.*| P
+
+  AF -->|reports/ADRs| MN
+  AG -->|scan findings| MN
+  EO -->|postmortems| MN
+
+  classDef p fill:#2b1b3a,stroke:#b084f5,color:#fff
+  classDef s fill:#1a132b,stroke:#a372f5,color:#fff

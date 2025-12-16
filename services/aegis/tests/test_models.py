@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from aegis.models import Finding, Severity
 
@@ -32,6 +32,6 @@ def test_waiver_dates():
         finding_fingerprint="abc",
         justification="ok",
         owner="alice",
-        expires_at=datetime.utcnow() + timedelta(days=7),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=7),
     )
     assert w.owner == "alice"

@@ -8,30 +8,41 @@ import typer
 
 from .models import Finding, Scan, Severity
 from .adapters.mongo_repository import MongoReportRepository
+from .scanners import RuffScanner, BlackScanner, SecretsScanner
 
 app = typer.Typer(help="Aegis — quality and security gate CLI")
 
 
-def _quick_scan(repo: str, commit: str) -> Scan:
-    """A very small MVP scanner that returns deterministic findings for demo/tests."""
-    findings: List[Finding] = []
+def _run_scanners(repo_path: str, commit: str, scanners: Optional[List[str]] = None) -> Scan:
+    """Run all configured scanners and aggregate findings."""
+    all_findings: List[Finding] = []
 
-    # Dummy lint finding
-    findings.append(
-        Finding(
-            id=None,
-            rule_id="lint-unused-import",
-            message="Unused import detected in module",
-            severity=Severity.LOW,
-            path="src/example.py",
-            line=10,
-        )
-    )
+    available_scanners = {
+        "ruff": RuffScanner(),
+        "black": BlackScanner(),
+        "secrets": SecretsScanner(),
+    }
 
-    # Dummy secret detection if string SECRET found in files (MVP: env-driven)
-    # We keep it deterministic and off by default.
+    if scanners is None:
+        scanners = ["ruff", "black", "secrets"]
 
-    return Scan(id=None, repo=repo, commit=commit, findings=findings)
+    for scanner_name in scanners:
+        scanner = available_scanners.get(scanner_name)
+        if scanner:
+            try:
+                findings = scanner.scan(repo_path)
+                all_findings.extend(findings)
+            except Exception as e:
+                all_findings.append(
+                    Finding(
+                        id=None,
+                        rule_id=f"{scanner_name}-fatal",
+                        message=f"Scanner {scanner_name} failed: {str(e)}",
+                        severity=Severity.MEDIUM,
+                    )
+                )
+
+    return Scan(id=None, repo=repo_path, commit=commit, findings=all_findings)
 
 
 @app.command()
@@ -45,9 +56,16 @@ def scan(
     baseline: Optional[str] = typer.Option(
         None, help="Path to baseline JSON file containing fingerprints"
     ),
+    scanners: Optional[str] = typer.Option(
+        None, help="Comma-separated list of scanners to run (default: all)"
+    ),
 ):
     """Run a scan and emit a JSON report."""
-    scan_result = _quick_scan(repo=repo, commit=commit)
+    scanner_list = None
+    if scanners:
+        scanner_list = [s.strip() for s in scanners.split(",")]
+
+    scan_result = _run_scanners(repo_path=repo, commit=commit, scanners=scanner_list)
 
     # Serialize
     payload = scan_result.dict()

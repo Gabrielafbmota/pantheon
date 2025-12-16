@@ -1,0 +1,131 @@
+"""MongoDB client adapter for {{ project_name }}."""
+
+import logging
+from typing import Optional
+
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
+
+logger = logging.getLogger(__name__)
+
+
+class MongoDBClient:
+    """
+    MongoDB client adapter using Motor (async MongoDB driver).
+
+    Provides connection management, health checks, and database access.
+    Follows the adapter pattern from Clean Architecture.
+    """
+
+    def __init__(
+        self,
+        uri: str,
+        database_name: str,
+        min_pool_size: int = 10,
+        max_pool_size: int = 100,
+        server_selection_timeout_ms: int = 5000,
+    ) -> None:
+        """
+        Initialize MongoDB client.
+
+        Args:
+            uri: MongoDB connection URI
+            database_name: Name of the database to use
+            min_pool_size: Minimum connection pool size
+            max_pool_size: Maximum connection pool size
+            server_selection_timeout_ms: Server selection timeout in milliseconds
+        """
+        self._uri = uri
+        self._database_name = database_name
+        self._client: Optional[AsyncIOMotorClient] = None
+        self._db: Optional[AsyncIOMotorDatabase] = None
+
+        self._min_pool_size = min_pool_size
+        self._max_pool_size = max_pool_size
+        self._server_selection_timeout_ms = server_selection_timeout_ms
+
+    async def connect(self) -> None:
+        """
+        Establish connection to MongoDB.
+
+        Should be called during application startup.
+
+        Raises:
+            ConnectionFailure: If connection cannot be established
+        """
+        try:
+            self._client = AsyncIOMotorClient(
+                self._uri,
+                minPoolSize=self._min_pool_size,
+                maxPoolSize=self._max_pool_size,
+                serverSelectionTimeoutMS=self._server_selection_timeout_ms,
+            )
+            self._db = self._client[self._database_name]
+
+            # Verify connection
+            await self._client.admin.command("ping")
+            logger.info(
+                f"Connected to MongoDB database: {self._database_name}",
+                extra={
+                    "database": self._database_name,
+                    "pool_min": self._min_pool_size,
+                    "pool_max": self._max_pool_size,
+                },
+            )
+        except (ConnectionFailure, ServerSelectionTimeoutError) as e:
+            logger.error(f"Failed to connect to MongoDB: {e}")
+            raise
+
+    async def disconnect(self) -> None:
+        """
+        Close MongoDB connection.
+
+        Should be called during application shutdown.
+        """
+        if self._client:
+            self._client.close()
+            logger.info("Disconnected from MongoDB")
+
+    async def health_check(self) -> bool:
+        """
+        Check if MongoDB connection is healthy.
+
+        Returns:
+            True if connection is healthy, False otherwise
+        """
+        if not self._client:
+            return False
+
+        try:
+            await self._client.admin.command("ping")
+            return True
+        except Exception as e:
+            logger.warning(f"MongoDB health check failed: {e}")
+            return False
+
+    @property
+    def database(self) -> AsyncIOMotorDatabase:
+        """
+        Get the database instance.
+
+        Returns:
+            Motor database instance
+
+        Raises:
+            RuntimeError: If not connected
+        """
+        if not self._db:
+            raise RuntimeError("MongoDB client not connected. Call connect() first.")
+        return self._db
+
+    def get_collection(self, collection_name: str):
+        """
+        Get a collection from the database.
+
+        Args:
+            collection_name: Name of the collection
+
+        Returns:
+            Motor collection instance
+        """
+        return self.database[collection_name]

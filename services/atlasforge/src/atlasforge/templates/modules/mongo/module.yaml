@@ -1,0 +1,43 @@
+name: mongo
+version: 1.0.0
+description: MongoDB database adapter with async Motor client
+category: database
+
+dependencies: []
+
+files:
+  - source: infrastructure/database/mongo_client.py.j2
+    destination: src/{{project_name|snake_case}}/infrastructure/database/mongo_client.py
+    is_user_editable: true
+
+  - source: infrastructure/database/__init__.py
+    destination: src/{{project_name|snake_case}}/infrastructure/database/__init__.py
+    is_user_editable: false
+
+  - source: domain/ports/database_port.py.j2
+    destination: src/{{project_name|snake_case}}/domain/ports/database_port.py
+    is_user_editable: true
+
+  - source: domain/ports/__init__.py
+    destination: src/{{project_name|snake_case}}/domain/ports/__init__.py
+    is_user_editable: false
+
+pip_dependencies:
+  - motor>=3.3.0
+  - pymongo>=4.6.0
+
+environment_variables:
+  - name: MONGO_URI
+    description: MongoDB connection string
+    example: mongodb://localhost:27017
+    required: true
+
+  - name: MONGO_DATABASE
+    description: MongoDB database name
+    example: myservice_db
+    required: true
+
+configuration:
+  connection_pool_min: 10
+  connection_pool_max: 100
+  server_selection_timeout_ms: 5000

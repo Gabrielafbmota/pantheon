@@ -1,0 +1,35 @@
+"""Event publisher port interface for {{ project_name }}."""
+
+from abc import ABC, abstractmethod
+from typing import List
+
+from {{ project_name|snake_case }}.domain.events.base_event import BaseEvent
+
+
+class IEventPublisher(ABC):
+    """
+    Port interface for event publishing.
+
+    This interface defines the contract for event publishers,
+    following the Dependency Inversion Principle from Clean Architecture.
+    """
+
+    @abstractmethod
+    async def publish(self, event: BaseEvent) -> None:
+        """
+        Publish a single event.
+
+        Args:
+            event: Event to publish
+        """
+        pass
+
+    @abstractmethod
+    async def publish_batch(self, events: List[BaseEvent]) -> None:
+        """
+        Publish multiple events in a batch.
+
+        Args:
+            events: List of events to publish
+        """
+        pass

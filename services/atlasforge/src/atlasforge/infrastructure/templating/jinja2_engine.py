@@ -130,6 +130,61 @@ class Jinja2TemplateEngine(ITemplateEnginePort):
         template = self.env.get_template(template_rel)
         return template.render(**context)
 
+    def render_module_file(
+        self,
+        module_name: str,
+        source_file: str,
+        destination: str,
+        context: Dict[str, Any],
+        output_path: Path,
+    ) -> str:
+        """
+        Render a single module file.
+
+        Args:
+            module_name: Name of the module (e.g., 'mongo', 'otel')
+            source_file: Source file path relative to module files/ directory
+            destination: Destination path (may contain template variables)
+            context: Template context variables
+            output_path: Root output path for the project
+
+        Returns:
+            Created file path (relative to output_path)
+        """
+        # Module files are in templates/modules/<module_name>/files/<source_file>
+        template_file_path = (
+            self.templates_dir / "modules" / module_name / "files" / source_file
+        )
+
+        if not template_file_path.exists():
+            raise ValueError(f"Module template file not found: {template_file_path}")
+
+        # Render destination path (may contain {{project_name}} etc)
+        rendered_dest = self._render_string(destination, context)
+        output_file = output_path / rendered_dest
+
+        # Read and render content
+        if template_file_path.suffix == ".j2":
+            # Render as Jinja2 template
+            template_rel = str(template_file_path.relative_to(self.templates_dir))
+            template = self.env.get_template(template_rel)
+            rendered_content = template.render(**context)
+
+            # Remove .j2 extension from output
+            if output_file.suffix == ".j2":
+                output_file = output_file.with_suffix("")
+        else:
+            # Copy as-is
+            rendered_content = template_file_path.read_text(encoding="utf-8")
+
+        # Ensure parent directory exists
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+
+        # Write file
+        output_file.write_text(rendered_content, encoding="utf-8")
+
+        return str(output_file.relative_to(output_path))
+
     def get_available_templates(self) -> List[str]:
         """
         Get list of available template names.

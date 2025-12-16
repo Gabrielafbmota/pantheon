@@ -1,0 +1,4 @@
+flowchart TD
+  Signals[Logs/Metrics/Traces] --> Detect[Detect Incident]
+  Detect --> Incident[Incident Record]
+  Incident --> Runbook[Runbook Actions]

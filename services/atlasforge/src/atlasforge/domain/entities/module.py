@@ -9,6 +9,19 @@ from atlasforge.domain.value_objects.template_version import TemplateVersion
 
 
 @dataclass(frozen=True)
+class ModuleFile:
+    """Represents a file within a module."""
+
+    source: str  # Source file path relative to module files/ directory
+    destination: str  # Destination path (may contain template variables)
+    is_user_editable: bool = True  # Whether users are expected to edit this file
+
+    def __hash__(self) -> int:
+        """Make ModuleFile hashable for use in frozensets."""
+        return hash((self.source, self.destination, self.is_user_editable))
+
+
+@dataclass(frozen=True)
 class ModuleDependency:
     """Represents a dependency on another module."""
 
@@ -30,110 +43,56 @@ class Module:
     """
 
     name: ModuleName
-    version: TemplateVersion
+    version: str  # Using str instead of TemplateVersion for simplicity
     description: str
-    dependencies: frozenset[ModuleDependency] = field(default_factory=frozenset)
-    poetry_dependencies: Dict[str, str] = field(default_factory=dict)
+    files: frozenset[ModuleFile] = field(default_factory=frozenset)
+    dependencies: frozenset[ModuleName] = field(default_factory=frozenset)
+    pip_dependencies: tuple[str, ...] = field(default_factory=tuple)
+    environment_variables: tuple[Dict[str, Any], ...] = field(default_factory=tuple)
     template_path: Optional[Path] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def requires_module(self, module_name: str) -> bool:
+    def has_dependency(self, module_name: str) -> bool:
         """
-        Check if this module requires another module (non-optional dependency).
+        Check if this module has a dependency.
 
         Args:
             module_name: Name of the module to check
-
-        Returns:
-            True if module is a required dependency
-        """
-        try:
-            target = ModuleName(module_name)
-            return any(
-                dep.module_name == target and not dep.is_optional for dep in self.dependencies
-            )
-        except Exception:
-            return False
-
-    def has_dependency(self, module_name: str, include_optional: bool = True) -> bool:
-        """
-        Check if this module has a dependency (required or optional).
-
-        Args:
-            module_name: Name of the module to check
-            include_optional: If True, include optional dependencies
 
         Returns:
             True if module is a dependency
         """
         try:
             target = ModuleName(module_name)
-            return any(
-                dep.module_name == target and (include_optional or not dep.is_optional)
-                for dep in self.dependencies
-            )
+            return target in self.dependencies
         except Exception:
             return False
 
     def get_all_dependencies(self) -> list[ModuleName]:
         """
-        Get all dependencies (including transitive - to be resolved by service).
+        Get all dependencies.
 
         Returns:
             List of module names that this module depends on
         """
-        return [dep.module_name for dep in self.dependencies]
-
-    def get_required_dependencies(self) -> list[ModuleName]:
-        """
-        Get only required (non-optional) dependencies.
-
-        Returns:
-            List of required module names
-        """
-        return [dep.module_name for dep in self.dependencies if not dep.is_optional]
-
-    def get_optional_dependencies(self) -> list[ModuleName]:
-        """
-        Get only optional dependencies.
-
-        Returns:
-            List of optional module names
-        """
-        return [dep.module_name for dep in self.dependencies if dep.is_optional]
+        return list(self.dependencies)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary representation."""
         return {
             "name": str(self.name),
-            "version": str(self.version),
+            "version": self.version,
             "description": self.description,
-            "dependencies": [
-                {"module": str(dep.module_name), "optional": dep.is_optional}
-                for dep in self.dependencies
+            "files": [
+                {
+                    "source": f.source,
+                    "destination": f.destination,
+                    "is_user_editable": f.is_user_editable,
+                }
+                for f in self.files
             ],
-            "poetry_dependencies": self.poetry_dependencies,
+            "dependencies": [str(dep) for dep in self.dependencies],
+            "pip_dependencies": list(self.pip_dependencies),
+            "environment_variables": list(self.environment_variables),
             "metadata": self.metadata,
         }
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Module":
-        """Create Module from dictionary."""
-        dependencies = []
-        for dep_data in data.get("dependencies", []):
-            dependencies.append(
-                ModuleDependency(
-                    module_name=ModuleName(dep_data["module"]),
-                    is_optional=dep_data.get("optional", False),
-                )
-            )
-
-        return cls(
-            name=ModuleName(data["name"]),
-            version=TemplateVersion(data["version"]),
-            description=data["description"],
-            dependencies=frozenset(dependencies),
-            poetry_dependencies=data.get("poetry_dependencies", {}),
-            template_path=Path(data["template_path"]) if "template_path" in data else None,
-            metadata=data.get("metadata", {}),
-        )

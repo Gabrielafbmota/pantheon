@@ -1,0 +1,92 @@
+"""Logging configuration for {{ project_name }}."""
+
+import logging
+import logging.config
+import os
+from typing import Any, Dict
+
+
+def get_log_level() -> str:
+    """
+    Get log level from environment.
+
+    Returns:
+        Log level string (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    """
+    return os.getenv("LOG_LEVEL", "INFO").upper()
+
+
+def get_logging_config() -> Dict[str, Any]:
+    """
+    Get structured logging configuration.
+
+    Returns:
+        Logging configuration dictionary
+    """
+    log_level = get_log_level()
+
+    return {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {
+                "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                "datefmt": "%Y-%m-%d %H:%M:%S",
+            },
+            "json": {
+                "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
+                "format": "%(asctime)s %(name)s %(levelname)s %(message)s",
+            },
+        },
+        "handlers": {
+            "console": {
+                "class": "logging.StreamHandler",
+                "level": log_level,
+                "formatter": "default",
+                "stream": "ext://sys.stdout",
+            },
+            "json_console": {
+                "class": "logging.StreamHandler",
+                "level": log_level,
+                "formatter": "json",
+                "stream": "ext://sys.stdout",
+            },
+        },
+        "root": {
+            "level": log_level,
+            "handlers": ["console"],
+        },
+        "loggers": {
+            "{{ project_name|snake_case }}": {
+                "level": log_level,
+                "handlers": ["console"],
+                "propagate": False,
+            },
+            "uvicorn": {
+                "level": "INFO",
+                "handlers": ["console"],
+                "propagate": False,
+            },
+            "uvicorn.access": {
+                "level": "INFO",
+                "handlers": ["console"],
+                "propagate": False,
+            },
+        },
+    }
+
+
+def configure_logging() -> None:
+    """
+    Configure application logging.
+
+    Should be called during application startup.
+    """
+    config = get_logging_config()
+    logging.config.dictConfig(config)
+
+    logger = logging.getLogger(__name__)
+    logger.info(
+        "Logging configured",
+        extra={"log_level": get_log_level()},
+    )

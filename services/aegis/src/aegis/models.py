@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from hashlib import sha256
 from typing import Any, Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
 
@@ -59,7 +59,7 @@ class Scan(BaseModel):
     id: Optional[str]
     repo: str
     commit: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     findings: List[Finding] = Field(default_factory=list)
 
     def summary(self) -> Dict[str, int]:
@@ -81,4 +81,4 @@ class Waiver(BaseModel):
     justification: str
     owner: str
     expires_at: datetime
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

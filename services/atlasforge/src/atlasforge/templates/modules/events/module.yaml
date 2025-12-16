@@ -1,0 +1,36 @@
+name: events
+version: 1.0.0
+description: Event-driven architecture with versioned events
+category: messaging
+
+dependencies: []
+
+files:
+  - source: domain/events/base_event.py.j2
+    destination: src/{{project_name|snake_case}}/domain/events/base_event.py
+    is_user_editable: true
+
+  - source: domain/events/__init__.py
+    destination: src/{{project_name|snake_case}}/domain/events/__init__.py
+    is_user_editable: false
+
+  - source: infrastructure/events/event_publisher.py.j2
+    destination: src/{{project_name|snake_case}}/infrastructure/events/event_publisher.py
+    is_user_editable: true
+
+  - source: infrastructure/events/__init__.py
+    destination: src/{{project_name|snake_case}}/infrastructure/events/__init__.py
+    is_user_editable: false
+
+  - source: domain/ports/event_port.py.j2
+    destination: src/{{project_name|snake_case}}/domain/ports/event_port.py
+    is_user_editable: true
+
+pip_dependencies:
+  - pydantic>=2.5.0
+
+environment_variables: []
+
+configuration:
+  event_format: "<domain>.v<version>.<action>"
+  event_retention_days: 30

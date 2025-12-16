@@ -1,0 +1,189 @@
+"""OpenTelemetry instrumentation for {{ project_name }}."""
+
+import logging
+import os
+from typing import Optional
+
+from opentelemetry import metrics, trace
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+logger = logging.getLogger(__name__)
+
+
+class TelemetryManager:
+    """
+    OpenTelemetry telemetry manager.
+
+    Handles initialization and configuration of traces, metrics, and logs.
+    """
+
+    def __init__(
+        self,
+        service_name: str,
+        otlp_endpoint: Optional[str] = None,
+        traces_enabled: bool = True,
+        metrics_enabled: bool = True,
+    ) -> None:
+        """
+        Initialize telemetry manager.
+
+        Args:
+            service_name: Name of the service
+            otlp_endpoint: OTLP exporter endpoint (if None, uses console exporter)
+            traces_enabled: Enable trace collection
+            metrics_enabled: Enable metrics collection
+        """
+        self.service_name = service_name
+        self.otlp_endpoint = otlp_endpoint or os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+        self.traces_enabled = traces_enabled
+        self.metrics_enabled = metrics_enabled
+
+        self._tracer_provider: Optional[TracerProvider] = None
+        self._meter_provider: Optional[MeterProvider] = None
+
+    def setup(self) -> None:
+        """
+        Setup OpenTelemetry instrumentation.
+
+        Should be called during application startup.
+        """
+        resource = Resource.create(
+            {
+                "service.name": self.service_name,
+                "service.version": "1.0.0",  # TODO: Get from package
+            }
+        )
+
+        if self.traces_enabled:
+            self._setup_traces(resource)
+
+        if self.metrics_enabled:
+            self._setup_metrics(resource)
+
+        logger.info(
+            f"OpenTelemetry initialized for service: {self.service_name}",
+            extra={
+                "service_name": self.service_name,
+                "traces_enabled": self.traces_enabled,
+                "metrics_enabled": self.metrics_enabled,
+                "otlp_endpoint": self.otlp_endpoint,
+            },
+        )
+
+    def _setup_traces(self, resource: Resource) -> None:
+        """Setup trace provider and exporters."""
+        if self.otlp_endpoint:
+            span_exporter = OTLPSpanExporter(endpoint=self.otlp_endpoint, insecure=True)
+        else:
+            # Console exporter for development
+            from opentelemetry.sdk.trace.export import ConsoleSpanExporter
+
+            span_exporter = ConsoleSpanExporter()
+
+        span_processor = BatchSpanProcessor(span_exporter)
+
+        self._tracer_provider = TracerProvider(resource=resource)
+        self._tracer_provider.add_span_processor(span_processor)
+
+        trace.set_tracer_provider(self._tracer_provider)
+        logger.info("Trace provider configured")
+
+    def _setup_metrics(self, resource: Resource) -> None:
+        """Setup metrics provider and exporters."""
+        if self.otlp_endpoint:
+            metric_exporter = OTLPMetricExporter(
+                endpoint=self.otlp_endpoint, insecure=True
+            )
+        else:
+            # Console exporter for development
+            from opentelemetry.sdk.metrics.export import ConsoleMetricExporter
+
+            metric_exporter = ConsoleMetricExporter()
+
+        metric_reader = PeriodicExportingMetricReader(metric_exporter)
+
+        self._meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
+
+        metrics.set_meter_provider(self._meter_provider)
+        logger.info("Metrics provider configured")
+
+    def instrument_fastapi(self, app) -> None:
+        """
+        Instrument FastAPI application with OpenTelemetry.
+
+        Args:
+            app: FastAPI application instance
+        """
+        FastAPIInstrumentor.instrument_app(app)
+        logger.info("FastAPI instrumented with OpenTelemetry")
+
+    def shutdown(self) -> None:
+        """
+        Shutdown telemetry providers.
+
+        Should be called during application shutdown.
+        """
+        if self._tracer_provider:
+            self._tracer_provider.shutdown()
+
+        if self._meter_provider:
+            self._meter_provider.shutdown()
+
+        logger.info("OpenTelemetry shutdown complete")
+
+
+# Global telemetry instance
+_telemetry_manager: Optional[TelemetryManager] = None
+
+
+def get_telemetry_manager() -> TelemetryManager:
+    """
+    Get the global telemetry manager instance.
+
+    Returns:
+        TelemetryManager instance
+
+    Raises:
+        RuntimeError: If telemetry not initialized
+    """
+    if _telemetry_manager is None:
+        raise RuntimeError("Telemetry not initialized. Call setup_telemetry() first.")
+    return _telemetry_manager
+
+
+def setup_telemetry(
+    service_name: str,
+    otlp_endpoint: Optional[str] = None,
+    traces_enabled: bool = True,
+    metrics_enabled: bool = True,
+) -> TelemetryManager:
+    """
+    Setup global telemetry manager.
+
+    Args:
+        service_name: Name of the service
+        otlp_endpoint: OTLP exporter endpoint
+        traces_enabled: Enable traces
+        metrics_enabled: Enable metrics
+
+    Returns:
+        TelemetryManager instance
+    """
+    global _telemetry_manager
+
+    _telemetry_manager = TelemetryManager(
+        service_name=service_name,
+        otlp_endpoint=otlp_endpoint,
+        traces_enabled=traces_enabled,
+        metrics_enabled=metrics_enabled,
+    )
+    _telemetry_manager.setup()
+
+    return _telemetry_manager

@@ -1,9 +1,11 @@
 """GenerateProject Use Case - Orchestrates project generation."""
 
+import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 from atlasforge.domain.entities.generation_result import GenerationResult
 from atlasforge.domain.entities.project_spec import ProjectSpec
@@ -12,8 +14,12 @@ from atlasforge.domain.exceptions.generation import GenerationException
 from atlasforge.domain.ports.checksum_port import IChecksumPort
 from atlasforge.domain.ports.filesystem_port import IFileSystemPort
 from atlasforge.domain.ports.manifest_repository_port import IManifestRepositoryPort
+from atlasforge.domain.ports.module_port import IModulePort
 from atlasforge.domain.ports.template_engine_port import ITemplateEnginePort
+from atlasforge.domain.services.module_resolver import ModuleResolver
 from atlasforge.domain.value_objects.file_path import FilePath
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -24,17 +30,19 @@ class GenerateProjectUseCase:
     Steps:
     1. Validate project doesn't exist
     2. Render base template
-    3. Calculate checksums for all files
-    4. Create manifest
-    5. Write manifest to project
+    3. Resolve and apply modules (if any)
+    4. Calculate checksums for all files
+    5. Create manifest
+    6. Write manifest to project
 
-    This is the core use case for MVP1.
+    Supports modular project generation with mongo, otel, events, etc.
     """
 
     filesystem: IFileSystemPort
     template_engine: ITemplateEnginePort
     checksum: IChecksumPort
     manifest_repo: IManifestRepositoryPort
+    module_loader: Optional[IModulePort] = None
 
     def execute(self, spec: ProjectSpec, target_dir: Path) -> GenerationResult:
         """
@@ -68,10 +76,19 @@ class GenerateProjectUseCase:
             base_files = self._render_base_template(spec, project_path)
             result.files_created.extend(base_files)
 
-            # 3. Calculate checksums
+            # 3. Apply modules (if any)
+            if spec.modules and self.module_loader:
+                module_files = self._apply_modules(spec, project_path)
+                result.files_created.extend(module_files)
+                logger.info(
+                    f"Applied {len(spec.modules)} modules",
+                    extra={"modules": [str(m) for m in spec.modules]},
+                )
+
+            # 4. Calculate checksums
             self._update_manifest_checksums(result.manifest, project_path)
 
-            # 4. Write manifest
+            # 5. Write manifest
             self.manifest_repo.save(result.manifest, project_path)
             result.files_created.append(".atlasforge/manifest.json")
 
@@ -129,6 +146,72 @@ class GenerateProjectUseCase:
         )
 
         return rendered_files
+
+    def _apply_modules(self, spec: ProjectSpec, project_path: Path) -> list[str]:
+        """
+        Apply module files to the project.
+
+        Args:
+            spec: Project specification with modules
+            project_path: Project root path
+
+        Returns:
+            List of created file paths (relative to project_path)
+        """
+        if not self.module_loader:
+            logger.warning("Module loader not configured, skipping modules")
+            return []
+
+        created_files = []
+
+        try:
+            # Load all modules
+            modules = self.module_loader.load_modules(spec.modules)
+
+            # Resolve module order (topological sort for dependencies)
+            resolver = ModuleResolver()
+            ordered_modules = resolver.resolve_order(modules)
+
+            logger.info(
+                f"Resolved {len(ordered_modules)} modules",
+                extra={"order": [str(m.name) for m in ordered_modules]},
+            )
+
+            # Apply each module
+            for module in ordered_modules:
+                logger.info(f"Applying module: {module.name}")
+
+                # Render module files
+                context = {
+                    "project_name": str(spec.project_name),
+                    "template_version": str(spec.template_version),
+                    "modules": spec.module_list(),
+                }
+
+                # Render each file in the module
+                for module_file in module.files:
+                    try:
+                        # Render the module file
+                        created_path = self.template_engine.render_module_file(
+                            module_name=module.name.value,
+                            source_file=module_file.source,
+                            destination=module_file.destination,
+                            context=context,
+                            output_path=project_path,
+                        )
+                        created_files.append(created_path)
+                        logger.debug(f"Rendered module file: {created_path}")
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to render module file {module_file.source}: {e}"
+                        )
+                        raise
+
+        except Exception as e:
+            logger.error(f"Failed to apply modules: {e}")
+            raise GenerationException(f"Module application failed: {e}") from e
+
+        return created_files
 
     def _update_manifest_checksums(
         self, manifest: TemplateManifest, project_path: Path

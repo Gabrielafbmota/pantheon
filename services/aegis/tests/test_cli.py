@@ -10,24 +10,31 @@ def test_scan_outputs_json():
 
     # Call the function directly to avoid subprocess/CLI parsing issues in test
     # Provide explicit `fail_on` to avoid receiving Typer OptionInfo defaults
-    _cli.scan(repo="testrepo", commit="abc", output="-", fail_on=_cli.Severity.HIGH)
+    _cli.scan(
+        repo="testrepo",
+        commit="abc",
+        output="-",
+        fail_on=_cli.Severity.HIGH,
+        scanners=None,
+        baseline=None,
+    )
 
 
 def test_delta_fails_on_new_high(tmp_path, monkeypatch):
     from aegis.models import Scan, Finding, Severity
 
-    # Replace _quick_scan to return a HIGH finding
-    def fake_scan(repo, commit):
+    # Replace _run_scanners to return a HIGH finding
+    def fake_scan(repo_path, commit, scanners=None):
         return Scan(
             id=None,
-            repo=repo,
+            repo=repo_path,
             commit=commit,
             findings=[
                 Finding(id=None, rule_id="r", message="m", severity=Severity.HIGH)
             ],
         )
 
-    monkeypatch.setattr("aegis.cli._quick_scan", fake_scan)
+    monkeypatch.setattr("aegis.cli._run_scanners", fake_scan)
 
     baseline_file = tmp_path / "baseline.json"
     baseline_file.write_text(
@@ -43,6 +50,7 @@ def test_delta_fails_on_new_high(tmp_path, monkeypatch):
             output="-",
             baseline=str(baseline_file),
             fail_on=_cli.Severity.HIGH,
+            scanners=None,
         )
 
 
@@ -51,10 +59,10 @@ def test_delta_passes_if_all_in_baseline(tmp_path, monkeypatch):
 
     f = Finding(id=None, rule_id="r", message="m", severity=Severity.HIGH)
 
-    def fake_scan(repo, commit):
-        return Scan(id=None, repo=repo, commit=commit, findings=[f])
+    def fake_scan(repo_path, commit, scanners=None):
+        return Scan(id=None, repo=repo_path, commit=commit, findings=[f])
 
-    monkeypatch.setattr("aegis.cli._quick_scan", fake_scan)
+    monkeypatch.setattr("aegis.cli._run_scanners", fake_scan)
 
     baseline_file = tmp_path / "baseline.json"
     baseline_file.write_text(
@@ -72,4 +80,5 @@ def test_delta_passes_if_all_in_baseline(tmp_path, monkeypatch):
         output="-",
         baseline=str(baseline_file),
         fail_on=_cli.Severity.HIGH,
+        scanners=None,
     )

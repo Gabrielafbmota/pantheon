@@ -1,0 +1,131 @@
+"""Database port interface for {{ project_name }}."""
+
+from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Optional
+
+
+class IDatabasePort(ABC):
+    """
+    Port interface for database operations.
+
+    This interface defines the contract for database adapters,
+    following the Dependency Inversion Principle from Clean Architecture.
+
+    Domain layer depends on this interface, not on specific implementations.
+    """
+
+    @abstractmethod
+    async def connect(self) -> None:
+        """Establish database connection."""
+        pass
+
+    @abstractmethod
+    async def disconnect(self) -> None:
+        """Close database connection."""
+        pass
+
+    @abstractmethod
+    async def health_check(self) -> bool:
+        """
+        Check database connection health.
+
+        Returns:
+            True if healthy, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def find_one(
+        self,
+        collection: str,
+        filter_dict: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Find a single document.
+
+        Args:
+            collection: Collection name
+            filter_dict: Query filter
+
+        Returns:
+            Document if found, None otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def find_many(
+        self,
+        collection: str,
+        filter_dict: Dict[str, Any],
+        limit: int = 100,
+        skip: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """
+        Find multiple documents.
+
+        Args:
+            collection: Collection name
+            filter_dict: Query filter
+            limit: Maximum number of documents
+            skip: Number of documents to skip
+
+        Returns:
+            List of documents
+        """
+        pass
+
+    @abstractmethod
+    async def insert_one(
+        self,
+        collection: str,
+        document: Dict[str, Any],
+    ) -> str:
+        """
+        Insert a single document.
+
+        Args:
+            collection: Collection name
+            document: Document to insert
+
+        Returns:
+            Inserted document ID
+        """
+        pass
+
+    @abstractmethod
+    async def update_one(
+        self,
+        collection: str,
+        filter_dict: Dict[str, Any],
+        update_dict: Dict[str, Any],
+    ) -> bool:
+        """
+        Update a single document.
+
+        Args:
+            collection: Collection name
+            filter_dict: Query filter
+            update_dict: Update operations
+
+        Returns:
+            True if document was updated, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def delete_one(
+        self,
+        collection: str,
+        filter_dict: Dict[str, Any],
+    ) -> bool:
+        """
+        Delete a single document.
+
+        Args:
+            collection: Collection name
+            filter_dict: Query filter
+
+        Returns:
+            True if document was deleted, False otherwise
+        """
+        pass

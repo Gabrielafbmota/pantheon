@@ -1,88 +1,293 @@
-# Aegis (MVP)
+# Aegis - Guardião de Qualidade e Segurança
 
-Aegis é um guardião de qualidade e segurança — MVP inicial.
+**Versão**: 0.1.0 (MVP1 Completo)
 
-- CLI: `aegis scan`
-- Modelos: `Policy`, `Rule`, `Scan`, `Finding`, `Baseline`, `Waiver`
-- Persistence: interfaces (stubs) para MongoDB
+Aegis é o guardião de qualidade e segurança da plataforma Atlas. Bloqueia regressões de qualidade e segurança **antes** do deploy através de scans automatizados.
 
-Como rodar (Poetry)
---------------------
+## Características
 
-Pré-requisitos: Python 3.11+ e Poetry instalado.
+- **CLI completa**: `aegis scan`, `aegis persist`
+- **Scanners reais**:
+  - **Ruff**: Lint Python rápido e moderno
+  - **Black**: Verificação de formatação
+  - **detect-secrets**: Detecção de secrets hardcoded
+- **Baseline delta**: Compara findings com baseline, bloqueia apenas novos
+- **Persistência MongoDB**: Armazena histórico de scans
+- **Pre-commit hook**: Verificações rápidas antes do commit
+- **CI/CD**: GitHub Actions para gate em PRs
+- **Instalação global**: Via pipx para uso em qualquer projeto
 
-No diretório do serviço (`services/aegis`):
+## Instalação
 
-1. Instalar dependências:
+### Pré-requisitos
+
+- Python 3.11+
+- Poetry (desenvolvimento) ou pipx (instalação global)
+
+### Instalação Global (Recomendado)
+
+Para usar Aegis em qualquer projeto:
+
+```bash
+cd services/aegis
+./install.sh
+```
+
+Ou via Makefile:
+
+```bash
+cd services/aegis
+make install-global
+```
+
+Depois da instalação:
+
+```bash
+aegis scan --repo . --output -
+```
+
+### Instalação Local (Desenvolvimento)
+
+No diretório do serviço:
 
 ```bash
 cd services/aegis
 poetry install
+poetry run aegis scan --repo . --output -
 ```
 
-2. Executar o scanner (CLI):
+## Uso
+
+### Scan Básico
 
 ```bash
-poetry run aegis scan --repo . --commit HEAD --output -
+aegis scan --repo . --commit HEAD --output -
 ```
 
-3. Persistir um relatório (Mongo):
+### Scan com Scanners Específicos
 
 ```bash
-# defina MONGO_URI no ambiente ou passe --mongo-uri
-poetry run aegis persist --input-file report.json --mongo-uri "mongodb://..."
+aegis scan --scanners ruff,secrets --fail-on HIGH
 ```
 
-Convenience:
+### Scan com Baseline Delta
 
-- `./run.sh` — wrapper para `poetry run` (ex.: `./run.sh scan --repo . --output -`)
-- `Makefile` com alvos `install`, `test`, `scan` e `run`.
+```bash
+# Criar baseline inicial
+aegis scan --output baseline.json
 
-Veja `docs/DECISIONS.md` para decisões de design e trade-offs.
+# Scan comparando com baseline (só falha em novos findings)
+aegis scan --baseline baseline.json
+```
 
-To-Do (roadmap) ✅
-------------------
+### Persistir Report no MongoDB
 
-Lista de tarefas e status atual do MVP:
+```bash
+aegis scan --output report.json
+aegis persist --input-file report.json --mongo-uri "mongodb://localhost:27017"
+```
 
-- [x] **Design do modelo de domínio** — `Policy`, `Rule`, `Scan`, `Finding`, `Baseline`, `Waiver` (implementado)
-- [x] **Implementar library core** — modelos Pydantic, validação, serialização (implementado)
-- [x] **Criar CLI MVP** — `scan` e `persist` com Typer (implementado)
-- [x] **Integração pre-commit** — hook rápido para `aegis scan` (implementado)
-- [x] **CI Gate (GitHub Actions)** — workflow que roda `aegis scan` em PRs (implementado)
-- [x] **Persistência MongoDB** — adapter básico `MongoReportRepository` (implementado)
-- [x] **Integrações de eventos** — stubs para Mnemosyne e EyeOfHorusOps (implementado)
-- [x] **Testes e CI** — testes unitários para modelos, CLI e adaptadores (implementado)
-- [x] **Documentação e decisões** — `docs/DECISIONS.md` e README (implementado)
-- [ ] **Explicação final e wrap up** — escrever seção de wrap-up com trade-offs, guia de uso e próximos passos (em progresso)
+### Opções Disponíveis
 
-Se quiser, posso transformar os itens acima em issues/PRs separados para acompanhar o progresso no repositório (posso criar/escrever as issues para você).
+**aegis scan**:
+- `--repo PATH`: Caminho do repositório (default: `.`)
+- `--commit REF`: Commit/ref sendo escaneado (default: `HEAD`)
+- `--output FILE`: Arquivo de saída (`-` para stdout)
+- `--fail-on SEVERITY`: Falhar se finding >= severity (default: `HIGH`)
+- `--baseline FILE`: Arquivo JSON com fingerprints aceitos
+- `--scanners LIST`: Lista separada por vírgulas (default: `ruff,black,secrets`)
 
-Próximos passos (priorizados) ▶️
----------------------------------
+**aegis persist**:
+- `--input-file FILE`: Report JSON (`-` para stdin)
+- `--mongo-uri URI`: Connection string (overrides `MONGO_URI` env)
 
-Estes são os próximos itens que recomendo para levar o MVP a um produto utilizável em projetos:
+## Integração
 
-- **Waivers** (prioridade alta)
-	- Implementar CRUD de waivers com campos obrigatórios (justificativa, owner, expires_at).
-	- Validar e aplicar waivers durante `scan` (skip/ignore findings cobertos) e expirar automaticamente.
-	- Adicionar comandos CLI: `waiver create|list|revoke|approve` e integração com persistência no Mongo.
+### Pre-commit Hook
 
-- **Baselines** (prioridade alta)
-	- Permitir export/import de baselines (fingerprints) e storage em MongoDB.
-	- Supportar comparação de delta (novos findings vs baseline) em CI e pre-commit.
+Adicione ao `.pre-commit-config.yaml`:
 
-- **Scanners adicionais (detectors)** (prioridade média)
-	- Integrar `detect-secrets` (secrets), `pip-audit` ou `safety` (dependências) e `bandit` (SAST) como módulos opcionais.
-	- Fazer adaptadores para rodar em pre-commit (rápidos) e em CI (com mais profundidade).
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: aegis-scan
+        name: Aegis scan
+        entry: aegis scan --repo . --commit HEAD --output -
+        language: system
+        types: [python]
+        pass_filenames: false
+```
 
-- **Política como código e versionamento de policies** (prioridade média)
-	- Definir schema de `policy` versionado e garantir auditabilidade (metadados + histórico).
+Instale:
 
-- **Integrações e eventos** (prioridade média)
-	- Implementar publishers reais para Mnemosyne (KnowledgeEntry) e EyeOfHorusOps (eventos) com retries e auth.
+```bash
+pre-commit install
+```
 
-- **Operacional e qualidade** (prioridade baixa)
-	- Documentação de uso (ex.: exemplos de `pre-commit` e workflow de PR), testes de integração e E2E, e um job CI que constrói e publica artefatos.
+### GitHub Actions
 
-Se desejar, começo imediatamente pelo item de maior prioridade — **Waivers** — e gero issues/PRs correspondentes. Qual item você prefere priorizar? 
+Exemplo de workflow:
+
+```yaml
+name: Aegis Scan
+
+on: [pull_request]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install Aegis
+        run: pipx install path/to/aegis/dist/*.whl
+      - name: Run scan
+        run: aegis scan --repo . --commit ${{ github.sha }}
+```
+
+## Scanners
+
+### Ruff (Lint)
+
+- **Propósito**: Lint Python (substituto de flake8, pylint)
+- **Severidades**: Erros → MEDIUM, Segurança → HIGH, Warnings → LOW
+- **Performance**: ~100ms para projetos médios
+
+### Black (Format)
+
+- **Propósito**: Verificação de formatação
+- **Severidade**: LOW
+- **Modo**: Check-only (não reformata)
+
+### detect-secrets (Secrets)
+
+- **Propósito**: Detectar secrets hardcoded
+- **Severidade**: CRITICAL
+- **Tipos**: API keys, tokens, senhas, connection strings
+
+## Helpers
+
+- `./run.sh` — wrapper para `poetry run aegis` (ex.: `./run.sh scan --repo .`)
+- `Makefile` com alvos:
+  - `make install` — instala dependências localmente
+  - `make install-global` — instala globalmente via pipx
+  - `make test` — roda testes
+  - `make scan` — executa scan no projeto
+  - `make run ARGS='...'` — executa comando customizado
+
+## Documentação
+
+- [IMPLEMENTATION.md](IMPLEMENTATION.md): Documentação técnica completa
+- [docs/DECISIONS.md](docs/DECISIONS.md): Decisões de design e trade-offs
+- [MVP_VALIDATION.md](MVP_VALIDATION.md): Análise de estado do MVP
+
+## Testes
+
+```bash
+cd services/aegis
+poetry run pytest -v
+```
+
+**Status**: 8 testes passando, cobertura de modelos, CLI, repositories e events.
+
+## MVP1 Status ✅
+
+Lista de funcionalidades implementadas:
+
+- [x] **Modelo de domínio** — `Policy`, `Rule`, `Scan`, `Finding`, `Baseline`, `Waiver`
+- [x] **CLI completa** — `scan` e `persist` com Typer
+- [x] **Scanners reais** — Ruff, Black, detect-secrets
+- [x] **Baseline delta** — Comparação de findings
+- [x] **Persistência MongoDB** — `MongoReportRepository`
+- [x] **Pre-commit hook** — Verificações rápidas
+- [x] **CI/CD** — GitHub Actions workflow
+- [x] **Instalador global** — Makefile e install.sh
+- [x] **Testes** — Unitários com 100% de aprovação
+- [x] **Documentação** — README, IMPLEMENTATION, DECISIONS
+- [x] **Integrações de eventos** — Stubs para Mnemosyne e EyeOfHorusOps
+
+## Roadmap
+
+### MVP2 (Próximos Passos)
+
+- [ ] **Waivers CRUD**: Comandos `waiver create|list|revoke`
+- [ ] **Aplicar waivers** durante scan (skip findings cobertos)
+- [ ] **Export/import baselines**: Persistência e versionamento
+- [ ] **Publishers reais**: Eventos para Mnemosyne e EyeOfHorusOps
+- [ ] **Scanners adicionais**: bandit (SAST), pip-audit (dependências)
+- [ ] **Testes E2E**: Integração completa
+
+### MVP3 (Evoluções)
+
+- [ ] **Políticas como código**: YAML/JSON versionado
+- [ ] **Painel web**: Visualização de scans e tendências
+- [ ] **Learning mode**: Não bloqueia, apenas reporta
+- [ ] **Auto-remediation**: Fixes automáticos quando possível
+- [ ] **Métricas**: Dashboards e alertas
+- [ ] **Multi-linguagem**: Go, Rust, TypeScript, Java
+
+## Arquitetura
+
+Aegis segue Clean Architecture:
+
+```
+src/aegis/
+├── models.py          # Domain (entidades puras)
+├── cli.py             # Application (casos de uso)
+├── adapters/          # Infrastructure (I/O)
+│   ├── mongo_repository.py
+│   └── events.py
+└── scanners/          # Infrastructure (tools)
+    ├── base.py
+    ├── ruff_scanner.py
+    ├── black_scanner.py
+    └── secrets_scanner.py
+```
+
+Veja [IMPLEMENTATION.md](IMPLEMENTATION.md) para detalhes completos.
+
+## Contribuindo
+
+### Adicionar Novo Scanner
+
+1. Criar `src/aegis/scanners/meu_scanner.py`
+2. Herdar de `Scanner` e implementar `scan()` e `name`
+3. Registrar em `cli.py`
+4. Adicionar testes
+
+Ver [IMPLEMENTATION.md](IMPLEMENTATION.md) para detalhes.
+
+## Troubleshooting
+
+### Scanner não encontrado
+
+```
+Finding: ruff-not-found - Ruff binary not found in PATH
+```
+
+**Solução**: `pip install ruff` ou garantir que está no PATH
+
+### MongoDB não conecta
+
+```
+EnvironmentError: MONGO_URI is required
+```
+
+**Solução**: `export MONGO_URI="mongodb://localhost:27017"` ou passar `--mongo-uri`
+
+## Licença
+
+Projeto interno Atlas Platform
+
+## Autores
+
+- Gabriela (implementação)
+- Claude Code (assistência)
+
+---
+
+**Status**: ✅ MVP1 Completo e pronto para uso!
