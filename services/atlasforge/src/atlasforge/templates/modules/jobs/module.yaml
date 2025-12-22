@@ -1,0 +1,35 @@
+name: jobs
+version: 1.0.0
+description: In-memory background job scheduler with hooks for metrics and retries
+category: operations
+
+dependencies: []
+
+files:
+  - source: domain/ports/job_port.py.j2
+    destination: src/{{project_name|snake_case}}/domain/ports/job_port.py
+    is_user_editable: true
+
+  - source: application/jobs/scheduler.py.j2
+    destination: src/{{project_name|snake_case}}/application/jobs/scheduler.py
+    is_user_editable: true
+
+  - source: infrastructure/jobs/memory_scheduler.py.j2
+    destination: src/{{project_name|snake_case}}/infrastructure/jobs/memory_scheduler.py
+    is_user_editable: true
+
+  - source: infrastructure/jobs/__init__.py
+    destination: src/{{project_name|snake_case}}/infrastructure/jobs/__init__.py
+    is_user_editable: false
+
+pip_dependencies: []
+
+environment_variables:
+  - name: JOB_MAX_CONCURRENCY
+    description: Maximum concurrent jobs
+    example: "4"
+    required: false
+
+configuration:
+  default_retry_attempts: 3
+  default_backoff_seconds: 1

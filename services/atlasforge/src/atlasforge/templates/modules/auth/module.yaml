@@ -1,0 +1,38 @@
+name: auth
+version: 1.0.0
+description: Basic API key authentication and lightweight RBAC helpers for FastAPI services
+category: security
+
+dependencies: []
+
+files:
+  - source: domain/ports/auth_port.py.j2
+    destination: src/{{project_name|snake_case}}/domain/ports/auth_port.py
+    is_user_editable: true
+
+  - source: presentation/api/security.py.j2
+    destination: src/{{project_name|snake_case}}/presentation/api/security.py
+    is_user_editable: true
+
+  - source: infrastructure/security/auth.py.j2
+    destination: src/{{project_name|snake_case}}/infrastructure/security/auth.py
+    is_user_editable: true
+
+  - source: infrastructure/security/__init__.py
+    destination: src/{{project_name|snake_case}}/infrastructure/security/__init__.py
+    is_user_editable: false
+
+pip_dependencies:
+  - fastapi>=0.111.0
+
+environment_variables:
+  - name: API_KEY
+    description: Shared API key for service-to-service calls
+    example: change-me
+    required: false
+
+configuration:
+  roles:
+    admin: can_write
+    ops: can_write
+    reader: read_only

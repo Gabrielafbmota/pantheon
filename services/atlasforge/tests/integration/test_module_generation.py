@@ -198,6 +198,23 @@ class TestModuleGeneration:
         )
         assert event_port.exists()
 
+    def test_generate_project_with_auth_and_jobs(
+        self, use_case: GenerateProjectUseCase, tmp_path: Path
+    ):
+        """Ensure new auth and jobs modules are rendered."""
+        spec = ProjectSpec(
+            project_name=ProjectName("secure-runner"),
+            template_version=TemplateVersion("1.0.0"),
+            modules=frozenset([ModuleName("auth"), ModuleName("jobs")]),
+        )
+
+        result = use_case.execute(spec, tmp_path)
+        assert result.success
+        project_path = tmp_path / "secure-runner"
+        assert (project_path / "src" / "secure_runner" / "presentation" / "api" / "security.py").exists()
+        assert (project_path / "src" / "secure_runner" / "application" / "jobs" / "scheduler.py").exists()
+        assert (project_path / "src" / "secure_runner" / "infrastructure" / "jobs" / "memory_scheduler.py").exists()
+
     def test_generate_project_with_multiple_modules(
         self, use_case: GenerateProjectUseCase, tmp_path: Path
     ):

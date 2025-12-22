@@ -186,6 +186,10 @@ class ModuleLoaderAdapter(IModulePort):
             ModuleName(dep) for dep in config_data.get("dependencies", [])
         )
 
+        env_vars = tuple(
+            tuple(sorted(ev.items())) if isinstance(ev, dict) else (ev,) for ev in config_data.get("environment_variables", [])
+        )
+
         return Module(
             name=ModuleName(config_data["name"]),
             version=config_data["version"],
@@ -193,5 +197,5 @@ class ModuleLoaderAdapter(IModulePort):
             files=frozenset(module_files),
             dependencies=dependencies,
             pip_dependencies=tuple(config_data.get("pip_dependencies", [])),
-            environment_variables=tuple(config_data.get("environment_variables", [])),
+            environment_variables=env_vars,
         )

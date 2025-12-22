@@ -165,12 +165,9 @@ class GenerateProjectUseCase:
         created_files = []
 
         try:
-            # Load all modules
-            modules = self.module_loader.load_modules(spec.modules)
-
             # Resolve module order (topological sort for dependencies)
-            resolver = ModuleResolver()
-            ordered_modules = resolver.resolve_order(modules)
+            resolver = ModuleResolver(self.module_loader)
+            ordered_modules = resolver.resolve(spec.modules)
 
             logger.info(
                 f"Resolved {len(ordered_modules)} modules",

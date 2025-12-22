@@ -1,0 +1,32 @@
+from __future__ import annotations
+
+import os
+from typing import Set
+
+from {{project_name|snake_case}}.domain.ports.auth_port import AuthContext, AuthServicePort
+
+
+class ApiKeyAuthService(AuthServicePort):
+    """
+    Minimal API key + role mapping service.
+    Stores no state; relies on environment variables.
+    """
+
+    def __init__(self, api_key_env: str = "API_KEY") -> None:
+        self.api_key_env = api_key_env
+
+    def authenticate(self, token: str | None) -> AuthContext:
+        expected = os.getenv(self.api_key_env)
+        if expected and token != expected:
+            raise PermissionError("invalid api key")
+        roles = self._default_roles()
+        return AuthContext(subject="service-account", roles=roles)
+
+    def authorize(self, ctx: AuthContext, roles: Set[str]) -> None:
+        if roles and not ctx.has_role(roles):
+            raise PermissionError("forbidden")
+
+    @staticmethod
+    def _default_roles() -> Set[str]:
+        raw = os.getenv("API_ROLES", "ops,reader")
+        return {r.strip().lower() for r in raw.split(",") if r}

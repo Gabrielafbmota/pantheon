@@ -19,6 +19,15 @@ Bloquear regressões de qualidade e segurança **antes** do deploy.
   - `quality.v1.scan_completed`
   - `quality.v1.violation_detected`
 
+## Estado atual
+| Área                      | Status | Observações                               |
+|---------------------------|--------|-------------------------------------------|
+| CLI (scan/persist)        | ✅      | Typer, baseline delta                     |
+| Scanners (ruff/black/secrets) | ✅  | Severidades mapeadas                      |
+| Mongo repository          | ✅      | Persistência de reports                   |
+| Integrações plataforma    | 🚧     | Stubs para Mnemosyne/EyeOfHorusOps        |
+| Waivers/CRUD              | ❌     | Planejado para MVP2                       |
+
 ## Evoluções
 - Painel de políticas
 - Learning mode

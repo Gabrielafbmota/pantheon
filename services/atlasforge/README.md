@@ -16,7 +16,7 @@ AtlasForge generates production-ready FastAPI projects with Clean Architecture i
 - ✅ **Production-ready** - Docker, tests, health checks included
 - ✅ **Manifest tracking** - SHA256 checksums for all files
 - ✅ **Idempotent** - Same input → same output, guaranteed
-- 🚧 **Modular** - Add MongoDB, OTEL, Events, Auth, Jobs (in progress)
+- ✅ **Modular** - MongoDB, OTEL, Events, Auth e Jobs
 - 📝 **Documented** - README, tests, API docs auto-generated
 
 ## 🚀 Quick Start
@@ -63,8 +63,9 @@ atlasforge generate my-service
 # Generate in specific directory
 atlasforge generate my-service --output /tmp
 
-# With modules (coming soon)
+# With modules
 atlasforge generate my-service --modules mongo,otel
+# Additional modules: events, auth, jobs
 ```
 
 This creates:

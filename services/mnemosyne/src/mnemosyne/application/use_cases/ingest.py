@@ -1,155 +1,155 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime
+import textwrap
+import uuid
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timezone
 from typing import List, Optional
-from uuid import uuid4
 
-from mnemosyne.domain.entities.models import (
-    AuditTrail,
-    KnowledgeEntry,
-    NormalizedDocument,
-    Source,
-    Tag,
-    Version,
-)
-from mnemosyne.infrastructure.indexing.simple_index import SimpleTextIndex
-from mnemosyne.infrastructure.persistence.repository import KnowledgeRepository
+from mnemosyne.domain.contracts import KnowledgeRepository, RawDocumentStorage, TextIndex
+from mnemosyne.domain.entities.models import AuditEvent, KnowledgeEntry, Source, Tag, Version
 
 
-class IngestionRequest(NormalizedDocument):
+@dataclass
+class IngestionRequest:
+    external_id: str
+    source: Source
+    content: str
+    tags: List[Tag] = field(default_factory=list)
+    taxonomy: List[str] = field(default_factory=list)
+    summary: Optional[str] = None
     run_id: Optional[str] = None
 
 
-class IngestionResult(NormalizedDocument):
-    run_id: str
-    deduplicated: bool
+@dataclass
+class IngestionResult:
     entry_id: str
     version_id: str
+    fingerprint: str
+    run_id: str
+    deduplicated: bool = False
 
 
 class IngestionPipeline:
-    def __init__(self, repository: KnowledgeRepository, index: SimpleTextIndex) -> None:
+    def __init__(
+        self,
+        repository: KnowledgeRepository,
+        index: TextIndex,
+        storage: RawDocumentStorage | None = None,
+    ) -> None:
         self.repository = repository
         self.index = index
+        self.storage = storage
 
-    def run(self, documents: List[IngestionRequest]) -> List[IngestionResult]:
-        if not documents:
-            return []
-        run_id = documents[0].run_id or str(uuid4())
-        if self.repository.has_run(run_id):
-            existing_run = self.repository.get_run(run_id)
-            return existing_run.get("results", []) if existing_run else []
-
-        audit_trail = AuditTrail(run_id=run_id)
-        normalized_docs = [self._normalize(doc) for doc in documents]
-        self.repository.store_inputs(run_id, normalized_docs)
-
+    def run(self, requests: List[IngestionRequest]) -> List[IngestionResult]:
         results: List[IngestionResult] = []
-        for doc in normalized_docs:
-            audit_trail.record(step="fetch", status="ok", detail=doc.external_id)
-            normalized_content = doc.content.strip()
-            audit_trail.record(step="normalize", status="ok", detail=str(len(normalized_content)))
-            fingerprint = self._fingerprint(normalized_content)
-            enriched_tags = self._enrich(doc)
-            audit_trail.record(step="enrich", status="ok", detail=fingerprint)
-            summary = doc.manual_summary or self._summarize(normalized_content)
-            audit_trail.record(step="summarize", status="ok", detail=str(len(summary)))
 
-            existing = self.repository.find_by_fingerprint(fingerprint)
-            if existing:
-                entry_id, version = existing
-                audit_trail.record(step="persist", status="deduplicated", detail=entry_id)
-                result = IngestionResult(
-                    external_id=doc.external_id,
-                    source=doc.source,
-                    content=normalized_content,
-                    tags=doc.tags,
-                    taxonomy=doc.taxonomy,
-                    manual_summary=doc.manual_summary,
-                    run_id=run_id,
-                    deduplicated=True,
-                    entry_id=entry_id,
-                    version_id=version.version_id,
-                )
-                results.append(result)
+        for request in requests:
+            run_id = request.run_id or str(uuid.uuid4())
+
+            # Idempotent: return previous run if already processed
+            existing_run = self.repository.get_run(run_id)
+            if existing_run:
+                results.extend(existing_run.results)
                 continue
 
-            entry = self.repository.find_entry_by_source(doc.source.id, doc.external_id)
-            version = Version(
-                content=normalized_content,
-                summary=summary,
-                fingerprint=fingerprint,
-                enriched_tags=enriched_tags,
-                taxonomy=doc.taxonomy,
-                run_id=run_id,
-            )
-            if entry:
-                self.repository.add_version(entry.entry_id, version)
-                audit_trail.record(step="persist", status="versioned", detail=entry.entry_id)
+            audit_events: List[AuditEvent] = []
+
+            # Persist raw content if storage configured
+            raw_uri = None
+            if self.storage:
+                raw_uri = self.storage.store(run_id=run_id, external_id=request.external_id, content=request.content)
+                audit_events.append(
+                    AuditEvent(
+                        run_id=run_id,
+                        step="persist_raw",
+                        status="ok",
+                        entry_id=request.external_id,
+                        metadata={"uri": raw_uri},
+                    )
+                )
+
+            # Normalize
+            normalized_content = self._normalize(request.content)
+            audit_events.append(AuditEvent(run_id=run_id, step="normalize", status="ok", entry_id=request.external_id))
+
+            # Enrich
+            fingerprint = self._fingerprint(normalized_content)
+            audit_events.append(AuditEvent(run_id=run_id, step="enrich", status="ok", entry_id=request.external_id))
+
+            # Summarize
+            summary = request.summary or self._summarize(normalized_content)
+            audit_events.append(AuditEvent(run_id=run_id, step="summarize", status="ok", entry_id=request.external_id))
+
+            # Persist + versioning
+            entry_id = f"{request.source.id}:{request.external_id}"
+            entry = self.repository.get_entry(entry_id)
+            deduplicated = False
+
+            if entry and entry.latest_version and entry.latest_version.fingerprint == fingerprint:
+                deduplicated = True
+                audit_events.append(AuditEvent(run_id=run_id, step="persist", status="deduplicated", entry_id=entry_id))
             else:
-                entry = KnowledgeEntry(
-                    source=doc.source,
-                    external_id=doc.external_id,
-                    tags=doc.tags,
-                    taxonomy=doc.taxonomy,
-                    versions=[version],
+                if not entry:
+                    entry = KnowledgeEntry(id=entry_id, source=request.source, external_id=request.external_id)
+                version = Version(
+                    fingerprint=fingerprint,
+                    normalized_content=normalized_content,
+                    summary=summary,
+                    tags=request.tags,
+                    taxonomy=request.taxonomy,
+                    raw_uri=raw_uri,
                 )
+                entry.add_version(version)
                 self.repository.save_entry(entry)
-                audit_trail.record(step="persist", status="created", detail=entry.entry_id)
+                audit_events.append(AuditEvent(run_id=run_id, step="persist", status="versioned", entry_id=entry_id))
 
-            self.index.index(entry.entry_id, f"{normalized_content} {summary}")
-            audit_trail.record(step="index", status="ok", detail=entry.entry_id)
+            # Index latest version for search
+            self.index.index(entry)
+            audit_events.append(AuditEvent(run_id=run_id, step="index", status="ok", entry_id=entry_id))
 
-            results.append(
-                IngestionResult(
-                    external_id=doc.external_id,
-                    source=doc.source,
-                    content=normalized_content,
-                    tags=doc.tags,
-                    taxonomy=doc.taxonomy,
-                    manual_summary=doc.manual_summary,
-                    run_id=run_id,
-                    deduplicated=False,
-                    entry_id=entry.entry_id,
-                    version_id=version.version_id,
-                )
+            result = IngestionResult(
+                entry_id=entry.id,
+                version_id=entry.latest_version.id if entry.latest_version else "",
+                fingerprint=fingerprint,
+                run_id=run_id,
+                deduplicated=deduplicated,
             )
+            results.append(result)
 
-        audit_trail.record(step="finish", status="ok", detail=str(len(results)))
-        self.repository.attach_audit(run_id, audit_trail)
-        entry_map = {entry.entry_id: entry for entry in self.repository.list_entries()}
-        self.repository.update_run_entries(run_id, [entry_map[r.entry_id] for r in results])
-        self.repository.store_run(
-            run_id,
-            {
-                "results": results,
-                "audit": audit_trail,
-                "inputs": normalized_docs,
-            },
-        )
+            self.repository.record_run(
+                self._build_run(run_id=run_id, request=request, result=result, audit_events=audit_events)
+            )
+            self.repository.record_audit_events(audit_events)
+
         return results
 
-    def _fingerprint(self, content: str) -> str:
-        return hashlib.sha256(content.encode("utf-8")).hexdigest()
+    def _build_run(
+        self, run_id: str, request: IngestionRequest, result: IngestionResult, audit_events: List[AuditEvent]
+    ):
+        from mnemosyne.domain.entities.models import IngestionRun
 
-    def _normalize(self, doc: IngestionRequest) -> NormalizedDocument:
-        normalized_content = "\n".join(line.strip() for line in doc.content.splitlines()).strip()
-        taxonomy = list(dict.fromkeys(doc.taxonomy))
-        return NormalizedDocument(
-            external_id=doc.external_id,
-            source=doc.source,
-            content=normalized_content,
-            tags=doc.tags,
-            taxonomy=taxonomy,
-            manual_summary=doc.manual_summary,
+        recorded_request = replace(request, run_id=run_id)
+
+        return IngestionRun(
+            run_id=run_id,
+            requests=[recorded_request],
+            results=[result],
+            status="completed",
+            audit_events=audit_events,
+            finished_at=datetime.now(timezone.utc),
         )
 
-    def _enrich(self, doc: NormalizedDocument) -> List[Tag]:
-        inherited_tags = list(doc.tags)
-        if doc.source.type:
-            inherited_tags.append(Tag(key=f"source:{doc.source.type.value}"))
-        return inherited_tags
+    @staticmethod
+    def _normalize(content: str) -> str:
+        return "\n".join(line.strip() for line in content.strip().splitlines())
 
-    def _summarize(self, content: str) -> str:
-        return content[:200] + ("…" if len(content) > 200 else "")
+    @staticmethod
+    def _fingerprint(content: str) -> str:
+        return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _summarize(content: str) -> str:
+        single_line = " ".join(content.split())
+        return textwrap.shorten(single_line, width=140, placeholder="...")

@@ -48,9 +48,23 @@ class Module:
     files: frozenset[ModuleFile] = field(default_factory=frozenset)
     dependencies: frozenset[ModuleName] = field(default_factory=frozenset)
     pip_dependencies: tuple[str, ...] = field(default_factory=tuple)
-    environment_variables: tuple[Dict[str, Any], ...] = field(default_factory=tuple)
+    environment_variables: tuple[tuple, ...] = field(default_factory=tuple)
     template_path: Optional[Path] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def __hash__(self) -> int:
+        """Custom hash to allow use in sets even with metadata present."""
+        return hash(
+            (
+                self.name,
+                self.version,
+                self.description,
+                tuple(self.files),
+                tuple(self.dependencies),
+                self.pip_dependencies,
+                self.environment_variables,
+            )
+        )
 
     def has_dependency(self, module_name: str) -> bool:
         """
@@ -77,6 +91,10 @@ class Module:
         """
         return list(self.dependencies)
 
+    def get_required_dependencies(self) -> list[ModuleName]:
+        """Alias kept for compatibility with older resolver."""
+        return self.get_all_dependencies()
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary representation."""
         return {
@@ -93,6 +111,6 @@ class Module:
             ],
             "dependencies": [str(dep) for dep in self.dependencies],
             "pip_dependencies": list(self.pip_dependencies),
-            "environment_variables": list(self.environment_variables),
+            "environment_variables": [dict(ev) if isinstance(ev, tuple) else ev for ev in self.environment_variables],
             "metadata": self.metadata,
         }

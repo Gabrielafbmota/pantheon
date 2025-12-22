@@ -1,0 +1,20 @@
+from __future__ import annotations
+
+from typing import Protocol
+
+
+class AuthContext:
+    def __init__(self, subject: str, roles: set[str]) -> None:
+        self.subject = subject
+        self.roles = roles
+
+    def has_role(self, required: set[str]) -> bool:
+        return bool(self.roles & required)
+
+
+class AuthServicePort(Protocol):
+    def authenticate(self, token: str | None) -> AuthContext:
+        ...
+
+    def authorize(self, ctx: AuthContext, roles: set[str]) -> None:
+        ...

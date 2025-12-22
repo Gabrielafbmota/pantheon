@@ -1,0 +1,14 @@
+from __future__ import annotations
+
+from typing import Awaitable, Callable, Protocol
+
+
+JobHandler = Callable[[], Awaitable[None]] | Callable[[], None]
+
+
+class JobSchedulerPort(Protocol):
+    def schedule(self, name: str, handler: JobHandler, *, delay_seconds: float = 0.0) -> str:
+        ...
+
+    def list_jobs(self) -> list[str]:
+        ...

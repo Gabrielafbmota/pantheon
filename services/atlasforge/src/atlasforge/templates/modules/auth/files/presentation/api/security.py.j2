@@ -1,0 +1,28 @@
+from __future__ import annotations
+
+from fastapi import Depends, Header, HTTPException, status
+
+from {{project_name|snake_case}}.domain.ports.auth_port import AuthContext
+from {{project_name|snake_case}}.infrastructure.security.auth import ApiKeyAuthService
+
+
+def get_auth(
+    x_api_key: str | None = Header(default=None),
+) -> AuthContext:
+    service = ApiKeyAuthService()
+    try:
+        return service.authenticate(x_api_key)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+
+
+def require_roles(required: set[str]):
+    def _enforce(ctx: AuthContext = Depends(get_auth)) -> AuthContext:
+        service = ApiKeyAuthService()
+        try:
+            service.authorize(ctx, required)
+        except PermissionError as exc:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        return ctx
+
+    return _enforce

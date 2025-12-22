@@ -1,0 +1,37 @@
+from __future__ import annotations
+
+import asyncio
+from typing import Callable
+
+from {{project_name|snake_case}}.application.jobs.scheduler import JobScheduler
+
+
+class InMemoryJobScheduler(JobScheduler):
+    """
+    Adds simple retry/backoff on top of the base scheduler.
+    """
+
+    def __init__(self, max_attempts: int = 3, backoff_seconds: float = 1.0) -> None:
+        super().__init__()
+        self.max_attempts = max_attempts
+        self.backoff_seconds = backoff_seconds
+
+    def schedule(self, name: str, handler: Callable, *, delay_seconds: float = 0.0) -> str:  # type: ignore[override]
+        async def _runner():
+            attempts = 0
+            while attempts < self.max_attempts:
+                try:
+                    if delay_seconds:
+                        await asyncio.sleep(delay_seconds)
+                    if asyncio.iscoroutinefunction(handler):
+                        await handler()  # type: ignore[misc]
+                    else:
+                        handler()
+                    return
+                except Exception:
+                    attempts += 1
+                    await asyncio.sleep(self.backoff_seconds)
+
+        task = asyncio.create_task(_runner(), name=name)
+        self._jobs[name] = task  # type: ignore[attr-defined]
+        return name

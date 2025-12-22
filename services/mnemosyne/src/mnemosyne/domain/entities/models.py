@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime
+import uuid
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, List, Optional
-from uuid import uuid4
-
-from pydantic import BaseModel, Field
+from typing import Any, Dict, List, Optional
 
 
 class SourceType(str, Enum):
@@ -15,77 +14,63 @@ class SourceType(str, Enum):
     OTHER = "other"
 
 
-class Source(BaseModel):
+@dataclass
+class Source:
     id: str
     name: str
     type: SourceType
-    metadata: Dict[str, str] = Field(default_factory=dict)
 
 
-class Tag(BaseModel):
+@dataclass
+class Tag:
     key: str
     value: Optional[str] = None
 
 
-class Version(BaseModel):
-    version_id: str = Field(default_factory=lambda: str(uuid4()))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    content: str
-    summary: str
+@dataclass
+class Version:
     fingerprint: str
-    enriched_tags: List[Tag] = Field(default_factory=list)
-    taxonomy: List[str] = Field(default_factory=list)
-    run_id: str
+    normalized_content: str
+    summary: str
+    tags: List[Tag]
+    taxonomy: List[str]
+    raw_uri: Optional[str] = None
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-class AuditEvent(BaseModel):
-    step: str
-    status: str
-    detail: Optional[str] = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-
-
-class AuditTrail(BaseModel):
-    run_id: str
-    events: List[AuditEvent] = Field(default_factory=list)
-
-    def record(self, step: str, status: str, detail: Optional[str] = None) -> None:
-        self.events.append(AuditEvent(step=step, status=status, detail=detail))
-
-
-class KnowledgeEntry(BaseModel):
-    entry_id: str = Field(default_factory=lambda: str(uuid4()))
+@dataclass
+class KnowledgeEntry:
+    id: str
     source: Source
     external_id: str
-    tags: List[Tag] = Field(default_factory=list)
-    taxonomy: List[str] = Field(default_factory=list)
-    versions: List[Version] = Field(default_factory=list)
+    versions: List[Version] = field(default_factory=list)
 
     @property
     def latest_version(self) -> Optional[Version]:
-        if not self.versions:
-            return None
-        return sorted(self.versions, key=lambda v: v.created_at)[-1]
+        return self.versions[-1] if self.versions else None
+
+    def add_version(self, version: Version) -> None:
+        self.versions.append(version)
 
 
-class NormalizedDocument(BaseModel):
-    external_id: str
-    source: Source
-    content: str
-    tags: List[Tag] = Field(default_factory=list)
-    taxonomy: List[str] = Field(default_factory=list)
-    manual_summary: Optional[str] = None
-
-
-class IngestionRun(BaseModel):
+@dataclass
+class AuditEvent:
     run_id: str
-    started_at: datetime
-    finished_at: Optional[datetime] = None
-    status: str = "pending"
-    audit_trail: AuditTrail
-    inputs: List[NormalizedDocument] = Field(default_factory=list)
-    produced_entries: List[KnowledgeEntry] = Field(default_factory=list)
+    step: str
+    status: str
+    entry_id: str
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    detail: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def complete(self, status: str) -> None:
-        self.status = status
-        self.finished_at = datetime.utcnow()
+
+@dataclass
+class IngestionRun:
+    run_id: str
+    requests: List[Any]
+    results: List[Any]
+    status: str
+    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    finished_at: Optional[datetime] = None
+    audit_events: List[AuditEvent] = field(default_factory=list)

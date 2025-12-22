@@ -1,0 +1,31 @@
+from __future__ import annotations
+
+import asyncio
+from typing import Callable
+
+from {{project_name|snake_case}}.domain.ports.job_port import JobHandler, JobSchedulerPort
+
+
+class JobScheduler(JobSchedulerPort):
+    """
+    Lightweight asyncio-based scheduler for small workloads.
+    """
+
+    def __init__(self) -> None:
+        self._jobs: dict[str, asyncio.Task] = {}
+
+    def schedule(self, name: str, handler: JobHandler, *, delay_seconds: float = 0.0) -> str:
+        async def _runner():
+            if delay_seconds:
+                await asyncio.sleep(delay_seconds)
+            if asyncio.iscoroutinefunction(handler):
+                await handler()  # type: ignore[misc]
+            else:
+                handler()  # type: ignore[arg-type]
+
+        task = asyncio.create_task(_runner(), name=name)
+        self._jobs[name] = task
+        return name
+
+    def list_jobs(self) -> list[str]:
+        return list(self._jobs.keys())
