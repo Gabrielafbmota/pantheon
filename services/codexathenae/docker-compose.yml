@@ -1,0 +1,42 @@
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mongo
+    networks:
+      - codex_net
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    command: sh -lc "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    env_file:
+      - ./.env
+    ports:
+      - "5173:5173"
+    networks:
+      - codex_net
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - codex_net
+
+networks:
+  codex_net:
+
+volumes:
+  mongo_data:
